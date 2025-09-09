@@ -4,10 +4,11 @@ streamlit
 joblib==1.5.2
 statsmodels==0.14.5
 scikit-learn==1.6.1
-numpy
-pandas
+numpy==2.2.6
+pandas==2.3.2
 tensorflow
 prophet
 openpyxl
+
 
 
