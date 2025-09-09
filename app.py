@@ -8,9 +8,7 @@ import pickle
 import traceback
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-# Ignore future and user warnings that can clutter the logs
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore")
 
 st.set_page_config(page_title="AQI Forecasting", page_icon="🌍", layout="wide")
 
@@ -19,23 +17,25 @@ st.set_page_config(page_title="AQI Forecasting", page_icon="🌍", layout="wide"
 def load_models():
     models = {}
 
-    # Load Random Forest model
+    # Random Forest
     try:
         models['rf'] = joblib.load("rf.pkl")
         st.sidebar.success("✅ RF loaded")
     except Exception as e:
         models['rf'] = None
         st.sidebar.error(f"❌ RF not loaded: {e}")
+        st.error(f"Failed to load RF model: {e}")
 
-    # Load XGBoost model
+    # XGBoost
     try:
         models['xgb'] = joblib.load("xgb.pkl")
         st.sidebar.success("✅ XGBoost loaded")
     except Exception as e:
         models['xgb'] = None
         st.sidebar.error(f"❌ XGBoost not loaded: {e}")
+        st.error(f"Failed to load XGBoost model: {e}")
 
-    # Load SARIMAX model
+    # Tiny SARIMAX
     try:
         with open("sarimax_tiny.pkl", "rb") as f:
             sarimax_small = pickle.load(f)
@@ -44,11 +44,10 @@ def load_models():
     except Exception as e:
         models['sarima_small'] = None
         st.sidebar.error("❌ SARIMA not loaded")
-        # Print the detailed traceback to the console for debugging
-        st.error("SARIMA model failed to load. Check the logs for a detailed traceback.")
+        st.error(f"SARIMA model failed to load. Check the logs for a detailed traceback: {e}")
         traceback.print_exc()
 
-    # Load Prophet model
+    # Prophet
     try:
         with open("prophet_model.pkl", "rb") as f:
             models['prophet'] = pickle.load(f)
@@ -56,6 +55,7 @@ def load_models():
     except Exception as e:
         models['prophet'] = None
         st.sidebar.warning(f"⚠️ Prophet not loaded: {e}")
+        st.error(f"Failed to load Prophet model: {e}")
 
     return models
 
@@ -72,17 +72,29 @@ def get_aqi_category(aqi):
 def sarimax_forecast(sarimax_small, last_endog, input_df):
     """
     Performs a SARIMAX forecast using the loaded model parameters.
+    The issue of index alignment is addressed here.
     """
-    model = SARIMAX(
-        endog=last_endog,
-        order=sarimax_small['order'],
-        seasonal_order=sarimax_small['seasonal_order'],
-        trend=sarimax_small['trend'],
-        exog=input_df
-    )
-    model_fit = model.filter(sarimax_small['params'])
-    forecast = model_fit.get_forecast(steps=1, exog=input_df).predicted_mean.iloc[0]
-    return forecast
+    try:
+        # Create a full SARIMAX model instance. Note that we are only providing
+        # the parameters and not fitting it again.
+        model = SARIMAX(
+            endog=last_endog,
+            order=sarimax_small['order'],
+            seasonal_order=sarimax_small['seasonal_order'],
+            trend=sarimax_small['trend'],
+            exog=pd.DataFrame([0] * len(last_endog), index=last_endog.index)
+        )
+        
+        # Filter the model with the pre-trained parameters
+        model_fit = model.filter(sarimax_small['params'])
+        
+        # Get the forecast for the single step using the new exog data
+        forecast = model_fit.get_forecast(steps=1, exog=input_df).predicted_mean.iloc[0]
+        return forecast
+    except Exception as e:
+        st.error(f"SARIMA prediction failed: {e}")
+        traceback.print_exc()
+        return None
 
 # ----------------- Prediction -----------------
 def predict_aqi(models, pm25, no, no2, last_endog=None):
@@ -101,12 +113,7 @@ def predict_aqi(models, pm25, no, no2, last_endog=None):
 
     # SARIMAX tiny
     if models.get('sarima_small') and last_endog is not None:
-        try:
-            preds['SARIMA'] = sarimax_forecast(models['sarima_small'], last_endog, input_df)
-        except Exception as e:
-            preds['SARIMA'] = None
-            st.error(f"SARIMA prediction failed: {e}")
-            traceback.print_exc()
+        preds['SARIMA'] = sarimax_forecast(models['sarima_small'], last_endog, input_df)
     else:
         preds['SARIMA'] = None
 
@@ -143,7 +150,6 @@ def main():
     # Load last 12 AQI observations
     last_endog = None
     try:
-        # Use a local path for the data file
         df_last = pd.read_excel("AQI.xlsx")
         last_endog = df_last['AQI Index'].iloc[-12:]
     except Exception as e:
