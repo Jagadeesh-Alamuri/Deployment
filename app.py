@@ -5,10 +5,12 @@ import pandas as pd
 import numpy as np
 import warnings
 import pickle
-import traceback # Import traceback for detailed error logging
+import traceback
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-warnings.filterwarnings("ignore")
+# Ignore future and user warnings that can clutter the logs
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 st.set_page_config(page_title="AQI Forecasting", page_icon="🌍", layout="wide")
 
@@ -17,23 +19,23 @@ st.set_page_config(page_title="AQI Forecasting", page_icon="🌍", layout="wide"
 def load_models():
     models = {}
 
-    # Random Forest
+    # Load Random Forest model
     try:
         models['rf'] = joblib.load("rf.pkl")
         st.sidebar.success("✅ RF loaded")
-    except:
+    except Exception as e:
         models['rf'] = None
-        st.sidebar.error("❌ RF not loaded")
+        st.sidebar.error(f"❌ RF not loaded: {e}")
 
-    # XGBoost
+    # Load XGBoost model
     try:
         models['xgb'] = joblib.load("xgb.pkl")
         st.sidebar.success("✅ XGBoost loaded")
-    except:
+    except Exception as e:
         models['xgb'] = None
-        st.sidebar.error("❌ XGBoost not loaded")
+        st.sidebar.error(f"❌ XGBoost not loaded: {e}")
 
-    # Tiny SARIMAX
+    # Load SARIMAX model
     try:
         with open("sarimax_tiny.pkl", "rb") as f:
             sarimax_small = pickle.load(f)
@@ -46,14 +48,14 @@ def load_models():
         st.error("SARIMA model failed to load. Check the logs for a detailed traceback.")
         traceback.print_exc()
 
-    # Prophet
+    # Load Prophet model
     try:
         with open("prophet_model.pkl", "rb") as f:
             models['prophet'] = pickle.load(f)
         st.sidebar.success("✅ Prophet loaded")
-    except:
+    except Exception as e:
         models['prophet'] = None
-        st.sidebar.warning("⚠️ Prophet not loaded")
+        st.sidebar.warning(f"⚠️ Prophet not loaded: {e}")
 
     return models
 
@@ -69,9 +71,7 @@ def get_aqi_category(aqi):
 # ----------------- SARIMAX Forecast -----------------
 def sarimax_forecast(sarimax_small, last_endog, input_df):
     """
-    sarimax_small: dict with params/order/seasonal_order/trend/exog_names
-    last_endog: pd.Series of last N AQI values (to initialize states)
-    input_df: user input exog (1 row)
+    Performs a SARIMAX forecast using the loaded model parameters.
     """
     model = SARIMAX(
         endog=last_endog,
@@ -86,6 +86,9 @@ def sarimax_forecast(sarimax_small, last_endog, input_df):
 
 # ----------------- Prediction -----------------
 def predict_aqi(models, pm25, no, no2, last_endog=None):
+    """
+    Gets predictions from all available models and returns an average.
+    """
     input_df = pd.DataFrame([[pm25, no, no2]],
                             columns=['PM2.5 (µg/m³)', 'NO (µg/m³)', 'NO2 (µg/m³)'])
     preds = {}
@@ -100,8 +103,10 @@ def predict_aqi(models, pm25, no, no2, last_endog=None):
     if models.get('sarima_small') and last_endog is not None:
         try:
             preds['SARIMA'] = sarimax_forecast(models['sarima_small'], last_endog, input_df)
-        except:
+        except Exception as e:
             preds['SARIMA'] = None
+            st.error(f"SARIMA prediction failed: {e}")
+            traceback.print_exc()
     else:
         preds['SARIMA'] = None
 
@@ -110,8 +115,10 @@ def predict_aqi(models, pm25, no, no2, last_endog=None):
         future = pd.DataFrame({'ds': [pd.Timestamp.today()]})
         try:
             preds['Prophet'] = models['prophet'].predict(future)['yhat'].values[0]
-        except:
+        except Exception as e:
             preds['Prophet'] = None
+            st.error(f"Prophet prediction failed: {e}")
+            traceback.print_exc()
     else:
         preds['Prophet'] = None
 
@@ -124,6 +131,7 @@ def predict_aqi(models, pm25, no, no2, last_endog=None):
 def main():
     st.title("🌍 AQI Forecasting")
 
+    # Load models at the start of the app run
     models = load_models()
 
     st.subheader("📊 Input Pollutants")
@@ -132,16 +140,15 @@ def main():
     with col2: no = st.number_input("NO (µg/m³)", 0.0, 200.0, 10.0)
     with col3: no2 = st.number_input("NO2 (µg/m³)", 0.0, 200.0, 20.0)
 
-    # Load last 12 AQI observations from GitHub Excel
+    # Load last 12 AQI observations
     last_endog = None
     try:
-        # Use a local path instead of the URL
+        # Use a local path for the data file
         df_last = pd.read_excel("AQI.xlsx")
-        last_endog = df_last['AQI Index'].iloc[-12:]  # last seasonal cycle
+        last_endog = df_last['AQI Index'].iloc[-12:]
     except Exception as e:
         st.warning(f"⚠️ Could not load last AQI observations for SARIMA. SARIMA predictions may be NA. Error: {e}")
     
-    # This is the button and the prediction logic
     if st.button("🔮 Predict AQI"):
         prediction, base_preds = predict_aqi(models, pm25, no, no2, last_endog=last_endog)
         category, color = get_aqi_category(prediction)
@@ -156,7 +163,6 @@ def main():
         st.subheader("🔧 Base Model Predictions")
         for name, val in base_preds.items():
             st.metric(name, f"{val:.1f}" if val is not None else "N/A")
-
 
 if __name__ == "__main__":
     main()
