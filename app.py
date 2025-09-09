@@ -131,7 +131,7 @@ def main():
     # Load last 12 AQI observations from GitHub Excel
     last_endog = None
     try:
-        url = "AQI.xlsx"
+        url = "https://github.com/Jagadeesh-Alamuri/Deployment/blob/main/AQI.xlsx"
         df_last = pd.read_excel(url)
         last_endog = df_last['AQI Index'].iloc[-12:]  # last seasonal cycle
     except:
@@ -155,5 +155,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
