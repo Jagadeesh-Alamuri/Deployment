@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import warnings
 import pickle
+import traceback # Import traceback for detailed error logging
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 warnings.filterwarnings("ignore")
@@ -40,7 +41,10 @@ def load_models():
         st.sidebar.success("✅ SARIMA loaded")
     except Exception as e:
         models['sarima_small'] = None
-        st.sidebar.warning(f"⚠️ SARIMA not loaded: {e}")
+        st.sidebar.error("❌ SARIMA not loaded")
+        # Print the detailed traceback to the console for debugging
+        st.error("SARIMA model failed to load. Check the logs for a detailed traceback.")
+        traceback.print_exc()
 
     # Prophet
     try:
