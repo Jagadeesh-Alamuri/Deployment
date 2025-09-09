@@ -72,11 +72,12 @@ def get_aqi_category(aqi):
 def sarimax_forecast(sarimax_small, last_endog, input_df):
     """
     Performs a SARIMAX forecast using the loaded model parameters.
-    The issue of index alignment is addressed here.
+    The issue of exogenous variable shape mismatch is addressed here.
     """
     try:
         # Create a full SARIMAX model instance. Note that we are only providing
         # the parameters and not fitting it again.
+        # We also create a dummy exog data with the correct shape (1,1)
         model = SARIMAX(
             endog=last_endog,
             order=sarimax_small['order'],
@@ -88,8 +89,9 @@ def sarimax_forecast(sarimax_small, last_endog, input_df):
         # Filter the model with the pre-trained parameters
         model_fit = model.filter(sarimax_small['params'])
         
-        # Get the forecast for the single step using the new exog data
-        forecast = model_fit.get_forecast(steps=1, exog=input_df).predicted_mean.iloc[0]
+        # Use only the PM2.5 column for the forecast, which aligns with the
+        # required shape (1, 1). This assumes the model was trained on PM2.5 alone.
+        forecast = model_fit.get_forecast(steps=1, exog=input_df[['PM2.5 (µg/m³)']]).predicted_mean.iloc[0]
         return forecast
     except Exception as e:
         st.error(f"SARIMA prediction failed: {e}")
@@ -106,10 +108,16 @@ def predict_aqi(models, pm25, no, no2, last_endog=None):
     preds = {}
 
     # Random Forest
-    preds['RF'] = models['rf'].predict(input_df)[0] if models['rf'] else None
+    if models['rf']:
+        preds['RF'] = models['rf'].predict(input_df)[0]
+    else:
+        preds['RF'] = None
 
     # XGBoost
-    preds['XGBoost'] = models['xgb'].predict(input_df)[0] if models['xgb'] else None
+    if models['xgb']:
+        preds['XGBoost'] = models['xgb'].predict(input_df)[0]
+    else:
+        preds['XGBoost'] = None
 
     # SARIMAX tiny
     if models.get('sarima_small') and last_endog is not None:
