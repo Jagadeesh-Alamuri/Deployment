@@ -129,15 +129,15 @@ def main():
     with col3: no2 = st.number_input("NO2 (µg/m³)", 0.0, 200.0, 20.0)
 
     # Load last 12 AQI observations from GitHub Excel
-   # ... other code
-last_endog = None
-try:
-    # Use a local path instead of the URL
-    df_last = pd.read_excel("AQI.xlsx")
-    last_endog = df_last['AQI Index'].iloc[-12:]  # last seasonal cycle
-except Exception as e:
-    st.warning(f"⚠️ Could not load last AQI observations for SARIMA. SARIMA predictions may be NA. Error: {e}")
-# ...
+    last_endog = None
+    try:
+        # Use a local path instead of the URL
+        df_last = pd.read_excel("AQI.xlsx")
+        last_endog = df_last['AQI Index'].iloc[-12:]  # last seasonal cycle
+    except Exception as e:
+        st.warning(f"⚠️ Could not load last AQI observations for SARIMA. SARIMA predictions may be NA. Error: {e}")
+    
+    # This is the button and the prediction logic
     if st.button("🔮 Predict AQI"):
         prediction, base_preds = predict_aqi(models, pm25, no, no2, last_endog=last_endog)
         category, color = get_aqi_category(prediction)
@@ -156,7 +156,3 @@ except Exception as e:
 
 if __name__ == "__main__":
     main()
-
-
-
-
