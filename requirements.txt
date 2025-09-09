@@ -1,11 +1,12 @@
 
 xgboost
 streamlit
-joblib==1.5.2
-statsmodels==0.14.5
-scikit-learn==1.6.1
+joblib
+statsmodels
+scikit-learn
 numpy
 pandas
 tensorflow
 prophet
 openpyxl
+
